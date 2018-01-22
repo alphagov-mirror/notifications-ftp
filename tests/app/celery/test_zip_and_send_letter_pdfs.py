@@ -30,26 +30,34 @@ def mocks(mocker, client):
         yield ZipAndSendLetterPDFsMocks
 
 
-def test_should_get_zip_of_letter_pdfs_from_s3(mocks):
-    filenames = ['2017-01-01/TEST1.PDF', '2017-01-01/TEST2.PDF']
-
+@pytest.mark.parametrize('filenames', [
+    ['2017-01-01/TEST1.PDF', '2017-01-01/TEST2.PDF'],
+    ['research/2017-01-01/TEST1.PDF', 'research/2017-01-01/TEST2.PDF']
+])
+def test_should_get_zip_of_letter_pdfs_from_s3(mocks, filenames):
     zip_and_send_letter_pdfs(filenames)
 
     mocks.get_zip_of_letter_pdfs_from_s3.assert_called_once_with(filenames)
 
 
-def test_should_upload_zip_of_letter_pdfs_to_s3(notify_ftp, mocks):
-    filenames = ['2017-01-01/TEST1.PDF']
+@pytest.mark.parametrize('filename,expected_data', [
+    ('2017-01-01/TEST1.PDF', b'["2017-01-01/TEST1.PDF"]'),
+    ('research/2017-01-01/TEST2.PDF', b'["research/2017-01-01/TEST2.PDF"]')
+])
+def test_should_upload_zip_of_letter_pdfs_to_s3(notify_ftp, mocks, filename, expected_data):
+    filenames = [filename]
+    subfolder = '/'.join(filename.split('/')[0:-1])
+
     zip_filename = get_dvla_file_name(dt=datetime(2017, 1, 1, 17, 30), file_ext='.zip')
-    location = '{}/{}'.format('2017-01-01', zip_filename)
+    location = '{}/{}'.format(subfolder, zip_filename)
 
     zip_and_send_letter_pdfs(filenames)
 
     assert mocks.upload_to_s3.call_args_list == [
         call(
             bucket_name=current_app.config['LETTERS_PDF_BUCKET_NAME'],
-            file_location='{}/zips_sent/{}.TXT'.format('2017-01-01', zip_filename),
-            filedata=b'["2017-01-01/TEST1.PDF"]',
+            file_location='{}/zips_sent/{}.TXT'.format(subfolder, zip_filename),
+            filedata=expected_data,
             region='eu-west-1'
         ),
         call(
@@ -72,6 +80,14 @@ def test_should_send_zip_file(mocks):
     )
 
 
+def test_should_not_send_zip_file_in_research_folder(mocks):
+    filenames = ['research/2017-01-01/TEST1.PDF']
+
+    zip_and_send_letter_pdfs(filenames)
+
+    assert not mocks.send_zip.called
+
+
 def test_should_get_references_out_of_s3_filenames(mocks):
     filenames = ['2017-01-01/TEST1.PDF']
 
@@ -80,9 +96,11 @@ def test_should_get_references_out_of_s3_filenames(mocks):
     mocks.get_notification_references_from_s3_filenames.assert_called_once_with(filenames)
 
 
-def test_zip_and_send_should_update_notifications_to_success(mocks):
-    filenames = ['2017-01-01/TEST1.PDF']
-
+@pytest.mark.parametrize('filenames', [
+    ['2017-01-01/TEST1.PDF'],
+    ['research/2017-01-01/TEST1.PDF']
+])
+def test_zip_and_send_should_update_notifications_to_success(mocks, filenames):
     zip_and_send_letter_pdfs(filenames)
 
     mocks.send_task.assert_called_once_with(
