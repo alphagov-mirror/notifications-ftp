@@ -78,7 +78,11 @@ def send_api_notifications_to_dvla(filename):
 @notify_celery.task(name="zip-and-send-letter-pdfs")
 @statsd(namespace="tasks")
 def zip_and_send_letter_pdfs(filenames_to_zip):
-    folder_date = filenames_to_zip[0].split('/')[0]
+    research_mode = True if filenames_to_zip[0].split('/')[0] == 'research' else False
+    if research_mode:
+        folder_date = 'research/{}'.format(filenames_to_zip[0].split('/')[1])
+    else:
+        folder_date = filenames_to_zip[0].split('/')[0]
 
     current_app.logger.info(
         "Starting to zip {file_count} letter PDFs in memory from {folder}".format(
@@ -119,7 +123,10 @@ def zip_and_send_letter_pdfs(filenames_to_zip):
                 elapsed_time=elapsed_time.total_seconds()
             )
         )
-        ftp_client.send_zip(zip_data, zip_file_name)
+
+        # When in research mode don't send any files to an FTP server
+        if not research_mode:
+            ftp_client.send_zip(zip_data, zip_file_name)
     except ClientError:
         current_app.logger.exception('FTP app failed to download PDF from S3 bucket {}'.format(folder_date))
         task_name = "update-letter-notifications-to-error"
