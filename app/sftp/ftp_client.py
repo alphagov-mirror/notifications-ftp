@@ -69,7 +69,8 @@ def upload_zip(sftp, zip_data, filename, statsd_client):
 
     upload_end_time = monotonic() - upload_start_time
 
-    current_app.logger.info("uploaded {} bytes in {} seconds".format(zip_data_len, upload_end_time))
+    current_app.logger.info("uploaded file {} of total size {} bytes in {} seconds".format(
+        filename, zip_data_len, upload_end_time))
 
     statsd_client.timing("ftp-client.zip-upload-time", upload_end_time)
 
